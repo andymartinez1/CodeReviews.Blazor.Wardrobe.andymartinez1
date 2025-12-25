@@ -1,0 +1,150 @@
+﻿@page "/"
+@page "/WardrobeInventoryList"
+@using Microsoft.AspNetCore.Components.QuickGrid
+@using Wardrobe_Inventory.Components.WardrobeComponents
+@inject NavigationManager NavigationManager
+@rendermode InteractiveServer
+
+<br/>
+<br/>
+@if (IsLoading)
+{
+    <div class="position-absolute w-75 h-75 d-flex flex-column align-items-center bg-white justify-content-center">
+        <img src="images/loading.gif" alt="loading"/>
+    </div>
+}
+else
+{
+    <div class="card mb-3 custom-card">
+        <div class="card-header d-flex flex-row">
+            <h3 class="flex-fill">Wardrobe Inventory</h3>
+            <input type="search" class="form-control-sm m-1" @bind="_categorySearch" @bind:event="oninput"
+                   placeholder="Search by category" autofocus="autofocus"/>
+            <div class="px-1">
+                <select class="form-select" @onchange="OnPageSizeChanged">
+                    <option value="5">5</option>
+                    <option value="10">10</option>
+                    <option value="25">25</option>
+                    <option value="50">50</option>
+                </select>
+            </div>
+            <AddClothingItemModalComponent ClothingCategory="@_categories"
+                                           Add="AddClothingItem"></AddClothingItemModalComponent>
+        </div>
+        <div class="card-body pb-2 px-0 mb-0">
+            <QuickGrid @ref="clothingItemGrid" Items="Items" ItemKey="x => x.Id"
+                       Class="table table-hover"
+                       Pagination="pagination">
+                <TemplateColumn Title="" Context="item" Align="Align.Center">
+                    <img src="@item.ImagePath" alt="" style="width: 5rem; height: 5rem"/>
+                </TemplateColumn>
+                <PropertyColumn Property="i => i.Name" Sortable="true" Align="Align.Center">
+                </PropertyColumn>
+                <PropertyColumn Property="i => i.Category" Sortable="true" Align="Align.Center"></PropertyColumn>
+                <PropertyColumn Property="i => i.Brand" Sortable="true" Align="Align.Center"></PropertyColumn>
+                <TemplateColumn Title="Size" Context="item" Align="Align.Center">
+                    @if (item.Category == ClothingCategory.Sneakers || item.Category == ClothingCategory.Boots)
+                    {
+                        @item.ShoeSize
+                    }
+                    else if (item.Category == ClothingCategory.Jeans)
+                    {
+                        @($"{item.JeansWaist}/{item.JeansInseam}")
+                    }
+                    else
+                    {
+                        @item.ShirtSize
+                    }
+                </TemplateColumn>
+                <PropertyColumn Property="i => i.Color" Sortable="true" Align="Align.Center"></PropertyColumn>
+                <TemplateColumn Title="Actions" Align="Align.Center" Context="item">
+                    <EditClothingItemModalComponent ClothingCategory="@_categories"
+                                                    Edit="EditClothingItem"
+                                                    ClothingItem="item"></EditClothingItemModalComponent>
+                    <DeleteClothingItemModalComponent
+                        Delete="async () => await DeleteClothingItem(item.Id)"></DeleteClothingItemModalComponent>
+                </TemplateColumn>
+            </QuickGrid>
+        </div>
+        <div class="card-footer">
+            <Paginator State="pagination"/>
+        </div>
+    </div>
+}
+
+@code {
+    [Inject] public IClothingItemService ClothingItemService { get; set; }
+    public bool IsLoading { get; set; } = true;
+    private readonly PaginationState pagination = new() { ItemsPerPage = 5 };
+
+    private QuickGrid<ClothingItem> clothingItemGrid;
+    private string _categorySearch = string.Empty;
+    private List<string> _categories;
+    private List<ClothingItem> _allItems = new();
+
+    private IQueryable<ClothingItem> Items
+    {
+        get
+        {
+            var result = _allItems.AsQueryable();
+            if (!string.IsNullOrEmpty(_categorySearch))
+            {
+                result = result.Where(c => c.Category.ToString().Contains(_categorySearch, StringComparison.OrdinalIgnoreCase));
+            }
+
+            return result;
+        }
+        set;
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        _allItems = await LoadClothingItems();
+
+        _categories = GetCategoryList();
+
+        Items = _allItems.AsQueryable();
+
+        IsLoading = false;
+    }
+
+    private async Task<List<ClothingItem>> LoadClothingItems()
+    {
+        return await ClothingItemService.GetAllClothingItemsAsync();
+    }
+
+    private void OnPageSizeChanged(ChangeEventArgs args)
+    {
+        if (args.Value != null)
+        {
+            pagination.ItemsPerPage = int.Parse((string)args.Value);
+        }
+    }
+
+    private async Task DeleteClothingItem(int id)
+    {
+        await ClothingItemService.DeleteClothingItemAsync(id);
+
+        NavigationManager.NavigateTo("/", true);
+    }
+
+    private List<string> GetCategoryList()
+    {
+        return _categories = ClothingItemService.GetClothingCategories();
+    }
+
+    private async Task AddClothingItem(ClothingItem clothingItem)
+    {
+        await ClothingItemService.AddClothingItemAsync(clothingItem);
+
+        NavigationManager.NavigateTo("/", true);
+    }
+
+    private async Task EditClothingItem(ClothingItem clothingItem)
+    {
+        await ClothingItemService.UpdateClothingItemAsync(clothingItem);
+
+        NavigationManager.NavigateTo("/", true);
+    }
+
+}
